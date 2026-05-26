@@ -1,36 +1,32 @@
-import uuid
-
-from pydantic.type_adapter import P
 from app.models.feature_spec import FeatureSpec
-from app.core.logger import logger
-from datetime import datetime, timezone
-from app.models.pipeline_state import PipelineState
-from app.core.pipeline_store import PIPELINE_STORE
 from app.models.pipeline_state import PipelineStage 
-from app.models.pipeline_state import PipelineStatus 
-
+from app.models.pipeline_state import PipelineStatus
+from app.models.pipeline_state_db import (
+    PipelineStateDB,
+    PipelineStage,
+    PipelineStatus,
+)
+from app.repository.pipeline_repository import PipelineRepository
 
 class SpecService:
 
     @staticmethod
-    async def process_spec(spec: FeatureSpec):
-        pipeline_id = str(uuid.uuid4())
+    async def process_spec(spec: FeatureSpec, session):
 
-        # NTR
-        logger.info("Processing specification")
-
-        pipeline_state = PipelineState(
-            pipeline_id=pipeline_id,
-            current_stage= PipelineStage.VALID,
-            status=  PipelineStatus.PLANNING,
-            spec= spec,
-            created_at=datetime.now(timezone.utc)
+        pipeline_state = PipelineStateDB(
+            current_stage=PipelineStage.VALID,
+            status=PipelineStatus.PLANNING,
+            spec=spec.model_dump(),
         )
 
-        PIPELINE_STORE[pipeline_id] = pipeline_state      
+        saved_pipeline = PipelineRepository.create(
+            session=session,
+            pipeline_state=pipeline_state
+        )
 
-    
         return {
-            "pipeline_id": pipeline_id,
-            "status": "validated",
+            "pipeline_id": saved_pipeline.pipeline_id,
+            "submitted_time": saved_pipeline.created_at,
+            "current_stage": saved_pipeline.current_stage,
+            "status": saved_pipeline.status
         }
