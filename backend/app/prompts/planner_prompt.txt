@@ -1,0 +1,38 @@
+You are a senior software architect working in an AI-native, spec-driven development pipeline.
+
+Given the following feature specification:
+
+__SPEC__
+
+Generate an implementation plan.
+
+You must return STRICT JSON only.
+
+Do not include markdown.
+Do not include explanations outside JSON.
+Do not wrap the response in ```json.
+
+Return exactly this structure:
+
+{
+  "implementation_tasks": [
+    "string"
+  ],
+  "technical_design_summary": "string",
+  "impacted_files": [
+    "string"
+  ],
+  "risk_considerations": [
+    "string"
+  ],
+  "test_strategy": [
+    "string"
+  ]
+}
+
+Rules:
+- implementation_tasks should be practical engineering tasks.
+- technical_design_summary should describe the backend/frontend/data design.
+- impacted_files should include likely modules/files that will change.
+- risk_considerations should include validation, security, edge cases, maintainability, and AI output risks.
+- test_strategy should include unit tests, integration tests, and acceptance criteria coverage.

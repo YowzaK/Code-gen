@@ -5,13 +5,20 @@ from enum import Enum
 from app.models.feature_spec import FeatureSpec
 from app.models.pipeline_plan import PipelinePlan
 
-class PipelineStage(Enum):
+class PipelineStage(str, Enum):
     VALID = "spec_valid"
     PLANNED = "spec_planned"
+    IMPLEMENTED = "code_generated"
+    TESTED = "tests_generated"
+    QUALITY_CHECKED = "quality_checked"
 
-class PipelineStatus(Enum):
+
+class PipelineStatus(str, Enum):
     PLANNING = "waiting_for_planning"
+    WAITING_FOR_PLAN_APPROVAL = "waiting_for_plan_approval"
     IMPLEMENTING = "waiting_for_implementation"
+    FAILED = "failed"
+    COMPLETED = "completed"
     
 
 class PipelineState(BaseModel):

@@ -10,15 +10,21 @@ from sqlmodel import SQLModel, Field
 class PipelineStage(str, Enum):
     VALID = "spec_valid"
     PLANNED = "spec_planned"
+    IMPLEMENTED = "code_generated"
+    TESTED = "tests_generated"
+    QUALITY_CHECKED = "quality_checked"
 
 
 class PipelineStatus(str, Enum):
     PLANNING = "waiting_for_planning"
+    WAITING_FOR_PLAN_APPROVAL = "waiting_for_plan_approval"
     IMPLEMENTING = "waiting_for_implementation"
+    FAILED = "failed"
+    COMPLETED = "completed"
 
 
 class PipelineStateDB(SQLModel, table=True):
-    __tablename__ = "pipeline_states"
+    __tablename__ = "pipelines"
 
     pipeline_id: str = Field(
         default_factory=lambda: str(uuid4()),
@@ -26,8 +32,8 @@ class PipelineStateDB(SQLModel, table=True):
         index=True,
     )
 
-    current_stage: PipelineStage = Field(default=PipelineStage.VALID)
-    status: PipelineStatus = Field(default=PipelineStatus.PLANNING)
+    current_stage: str = Field(default=PipelineStage.VALID.value)
+    status: str = Field(default=PipelineStatus.PLANNING.value)
 
     spec: dict = Field(
         sa_column=Column(JSONB, nullable=False)
