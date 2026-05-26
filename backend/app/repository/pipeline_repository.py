@@ -1,9 +1,6 @@
 from typing import Optional
-
 from sqlmodel import Session, select
-
 from app.models.pipeline_state_db import PipelineStateDB
-
 
 class PipelineRepository:
 

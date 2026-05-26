@@ -2,7 +2,6 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 from pydantic import ValidationError
-
 from app.core.logger import logger
 from app.core.database import get_session
 from app.repository.pipeline_repository import PipelineRepository
@@ -10,6 +9,8 @@ from app.services.planner_service import PlannerService
 from app.models.pipeline_plan import PipelinePlan
 from app.models.pipeline_state_db import PipelineStage, PipelineStatus
 from openai import RateLimitError
+from app.services.audit_service import AuditService
+from app.core.event_types import PLAN_GENERATED, PIPELINE_FAILED
 
 
 router = APIRouter()
@@ -73,7 +74,6 @@ async def generate_pipeline_plan(
         )
 
     try:
-        logger.info(f"Starting planning stage for pipeline: {pipeline_id}")
 
         generated_plan = await PlannerService.generate_plan(
             pipeline_state.spec
@@ -85,9 +85,24 @@ async def generate_pipeline_plan(
         pipeline_state.current_stage = PipelineStage.PLANNED.value
         pipeline_state.status = PipelineStatus.WAITING_FOR_PLAN_APPROVAL.value
 
+
         updated_pipeline = PipelineRepository.update(
             session=session,
             pipeline_state=pipeline_state
+        )
+
+        # audit log
+        AuditService.log_event(
+            session=session,
+            pipeline_id=updated_pipeline.pipeline_id,
+            event_type=PLAN_GENERATED,
+            event_message="Implementation plan generated successfully",
+            event_payload={
+                "current_stage": updated_pipeline.current_stage,
+                "status": updated_pipeline.status,
+                "plan": updated_pipeline.plan
+            },
+            created_by="system"
         )
 
         return {
@@ -101,12 +116,6 @@ async def generate_pipeline_plan(
     except ValidationError as error:
         logger.error(f"Generated plan failed validation: {error}")
 
-        pipeline_state.status = PipelineStatus.FAILED.value
-        PipelineRepository.update(
-            session=session,
-            pipeline_state=pipeline_state
-        )
-
         raise HTTPException(
             status_code=422,
             detail={
@@ -118,12 +127,6 @@ async def generate_pipeline_plan(
     except json.JSONDecodeError as error:
         logger.error(f"LLM returned invalid JSON: {error}")
 
-        pipeline_state.status = PipelineStatus.FAILED
-        PipelineRepository.update(
-            session=session,
-            pipeline_state=pipeline_state
-        )
-
         raise HTTPException(
             status_code=422,
             detail="LLM returned invalid JSON"
@@ -132,12 +135,6 @@ async def generate_pipeline_plan(
     except RateLimitError as error:
         logger.error(f"LLM rate limit hit: {error}")
 
-        pipeline_state.status = PipelineStatus.FAILED.value
-        PipelineRepository.update(
-            session=session,
-            pipeline_state=pipeline_state
-        )
-
         raise HTTPException(
             status_code=429,
             detail="The selected free LLM model is temporarily rate-limited. Try another model or retry later."
@@ -145,12 +142,6 @@ async def generate_pipeline_plan(
 
     except Exception as error:
         logger.error(f"Planning failed for pipeline {pipeline_id}: {error}")
-
-        pipeline_state.status = PipelineStatus.FAILED
-        PipelineRepository.update(
-            session=session,
-            pipeline_state=pipeline_state
-        )
 
         raise HTTPException(
             status_code=500,

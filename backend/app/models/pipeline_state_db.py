@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 from enum import Enum
@@ -59,4 +59,6 @@ class PipelineStateDB(SQLModel, table=True):
         sa_column=Column(JSONB, nullable=True)
     )
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(
+    default_factory=lambda: datetime.now(timezone.utc)
+)
