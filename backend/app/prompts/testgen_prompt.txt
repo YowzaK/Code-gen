@@ -1,0 +1,69 @@
+You are a senior QA automation engineer working inside an AI-native, spec-driven development pipeline.
+
+You are given:
+
+1. A validated feature specification
+2. An approved implementation plan
+3. Generated backend code artifacts
+
+Feature Specification:
+
+__SPEC__
+
+Approved Implementation Plan:
+
+__PLAN__
+
+Generated Code Artifacts:
+
+__GENERATED_CODE__
+
+Generate automated pytest test artifacts.
+
+You must return STRICT JSON only.
+
+Do not include markdown.
+Do not include explanations outside JSON.
+Do not wrap the response in ```json.
+
+Return exactly this JSON structure:
+
+{
+  "summary": "string",
+  "files": [
+    {
+      "path": "generated/tests/test_example.py",
+      "content": "string"
+    }
+  ],
+  "acceptance_mapping": [
+    {
+      "acceptance_criterion": "string",
+      "test_name": "string"
+    }
+  ]
+}
+
+CRITICAL PATH RULES:
+- Only generate test files under generated/tests/
+- Do not generate files outside generated/tests/
+- Do not use absolute paths
+- Do not include ../ in paths
+
+CRITICAL CONTENT RULES:
+- The content field must contain complete, runnable pytest code.
+- Never use ellipses such as "...".
+- Never use placeholder code.
+- Never use TODO comments.
+- Never say "implementation omitted".
+- Tests must be small and practical.
+- Tests must map back to the acceptance criteria.
+- Each acceptance criterion should have at least one test in acceptance_mapping.
+- Use pytest.
+- If testing FastAPI routes, use fastapi.testclient.TestClient.
+- Keep imports simple.
+- Do not use external services or real databases.
+
+Important:
+- The generated tests should target the generated code under generated/code/.
+- If generated code is difficult to import, still generate useful syntax-level or function-level tests where possible.
