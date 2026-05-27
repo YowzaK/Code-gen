@@ -86,3 +86,27 @@ class PipelineRepository:
         session.refresh(pipeline_state)
 
         return pipeline_state
+
+    @staticmethod
+    def update_generated_tests(
+        session: Session,
+        pipeline_id: str,
+        generated_tests: dict,
+        current_stage: str,
+        status: str
+    ) -> Optional[PipelineStateDB]:
+
+        pipeline_state = PipelineRepository.get_by_id(session, pipeline_id)
+
+        if pipeline_state is None:
+            return None
+
+        pipeline_state.generated_tests = generated_tests
+        pipeline_state.current_stage = current_stage
+        pipeline_state.status = status
+
+        session.add(pipeline_state)
+        session.commit()
+        session.refresh(pipeline_state)
+
+        return pipeline_state

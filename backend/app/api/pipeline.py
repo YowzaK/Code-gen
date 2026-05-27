@@ -10,10 +10,12 @@ from app.models.pipeline_plan import PipelinePlan
 from app.models.pipeline_state_db import PipelineStage, PipelineStatus
 from openai import RateLimitError
 from app.services.audit_service import AuditService
-from app.core.event_types import PLAN_GENERATED, PLAN_APPROVED, CODE_GENERATED, CODE_SAVED
+from app.core.event_types import PLAN_GENERATED, PLAN_APPROVED, CODE_GENERATED, CODE_SAVED, TESTS_GENERATED, TEST_GENERATION_FAILED
 from app.services.codegen_service import CodegenService
 from app.services.path_policy_service import PathPolicyService
 from app.models.generated_code import CodeGenerationResult
+from app.services.testgen_service import TestgenService
+from app.models.generated_tests import TestGenerationResult
 
 router = APIRouter()
 
@@ -363,4 +365,107 @@ async def save_code(
         raise HTTPException(
             status_code=500,
             detail="Code saving failed"
+        ) from error
+
+
+@router.post("/{pipeline_id}/generate-tests")
+async def generate_tests(
+    pipeline_id: str,
+    session: Session = Depends(get_session)
+):
+    pipeline_state = PipelineRepository.get_by_id(session, pipeline_id)
+
+    if pipeline_state is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Pipeline not found"
+        )
+
+    if pipeline_state.generated_code is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Pipeline does not contain generated code"
+        )
+
+    if pipeline_state.current_stage != PipelineStage.IMPLEMENTED.value:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tests cannot be generated from current stage: {pipeline_state.current_stage}"
+        )
+
+    try:
+        generated_tests = await TestgenService.generate_tests(
+            spec=pipeline_state.spec,
+            plan=pipeline_state.plan,
+            generated_code=pipeline_state.generated_code
+        )
+
+        validated_tests = TestGenerationResult(**generated_tests)
+
+        for test_file in validated_tests.files:
+            PathPolicyService.validate_generated_path(test_file.path)
+
+        written_files = CodegenService.write_generated_files(
+            validated_tests.model_dump()
+        )
+
+        updated_pipeline = PipelineRepository.update_generated_tests(
+            session=session,
+            pipeline_id=pipeline_id,
+            generated_tests=validated_tests.model_dump(),
+            current_stage=PipelineStage.TESTS_GENERATED.value,
+            status=PipelineStatus.TESTS_GENERATED.value
+        )
+
+        if updated_pipeline is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Pipeline not found"
+            )
+
+        AuditService.log_event(
+            session=session,
+            pipeline_id=updated_pipeline.pipeline_id,
+            event_type=TESTS_GENERATED,
+            event_message="Automated tests generated and materialized successfully",
+            event_payload={
+                "current_stage": updated_pipeline.current_stage,
+                "status": updated_pipeline.status,
+                "written_files": written_files,
+                "acceptance_mapping": updated_pipeline.generated_tests.get(
+                    "acceptance_mapping"
+                )
+            },
+            created_by="system"
+        )
+
+        return {
+            "message": "Tests generated successfully",
+            "pipeline_id": updated_pipeline.pipeline_id,
+            "current_stage": updated_pipeline.current_stage,
+            "status": updated_pipeline.status,
+            "generated_tests": updated_pipeline.generated_tests,
+            "written_files": written_files
+        }
+
+    except ValueError as error:
+        logger.error("Generated tests failed validation: %s", error)
+
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+    except RateLimitError as error:
+        logger.error("LLM rate limit hit during test generation: %s", error)
+
+        raise HTTPException(
+            status_code=429,
+            detail="The selected free LLM model is temporarily rate-limited."
+        ) from error
+
+    except Exception as error:
+        logger.error("Test generation failed for pipeline %s: %s", pipeline_id, error)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Test generation failed"
         ) from error

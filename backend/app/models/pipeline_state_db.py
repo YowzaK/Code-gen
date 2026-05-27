@@ -12,7 +12,7 @@ class PipelineStage(str, Enum):
     PLANNED = "spec_planned"
     APPROVED = "spec_plan_approved"
     IMPLEMENTED = "code_generated"
-    TESTED = "tests_generated"
+    TESTS_GENERATED = "tests_generated"
     QUALITY_CHECKED = "quality_checked"
 
 
@@ -21,8 +21,9 @@ class PipelineStatus(str, Enum):
     PLANNED = "waiting_for_plan_approval"
     APPROVED= "waiting_for_Implementation"
     IMPLEMENTED = "waiting for testing"
-    FAILED = "failed"
-    COMPLETED = "completed"
+    TESTS_GENERATED = "waiting_for_quality_gates"
+    QUALITY_PASSED = "quality_passed"
+    QUALITY_FAILED = "quality_failed"
 
 
 class PipelineStateDB(SQLModel, table=True):
