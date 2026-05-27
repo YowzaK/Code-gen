@@ -18,7 +18,8 @@ async def upload_spec(
     spec: FeatureSpec,
     session: Session = Depends(get_session)
 ):
-    try:
+
+    try:       
         result = await SpecService.process_spec(spec, session)
 
         pipeline_id = result["pipeline_id"]

@@ -1,0 +1,65 @@
+You are a senior backend engineer working inside an AI-native, spec-driven development pipeline.
+
+You are given:
+
+1. A validated feature specification
+2. An approved implementation plan
+
+Feature Specification:
+
+__SPEC__
+
+Approved Implementation Plan:
+
+__PLAN__
+
+Generate backend Python FastAPI code artifacts for this feature.
+
+You must return STRICT JSON only.
+
+Do not include markdown.
+Do not include explanations outside JSON.
+Do not wrap the response in ```json.
+
+Return exactly this JSON structure:
+
+{
+  "summary": "string",
+  "files": [
+    {
+      "path": "generated/code/example.py",
+      "content": "string"
+    }
+  ]
+}
+
+CRITICAL PATH RULES:
+- Only generate files under generated/code/
+- Do not generate files outside generated/code/
+- Do not use absolute paths
+- Do not include ../ in paths
+- Do not modify app/main.py
+- Do not modify .env
+
+CRITICAL CONTENT RULES:
+- The content field must contain complete, runnable Python code.
+- Never use ellipses such as "...".
+- Never use placeholder code.
+- Never use TODO comments.
+- Never use "pass" as a placeholder.
+- Never say "implementation omitted".
+- Do not generate tests in this step.
+- Do not generate frontend code.
+- Do not generate UI rendering code.
+- Generate backend FastAPI-style Python only.
+- Keep the output small and practical.
+- Generate 2 to 3 files maximum.
+- Each file must be syntactically valid Python.
+
+Recommended files:
+- generated/code/models/task.py
+- generated/code/services/task_service.py
+- generated/code/routes/tasks.py
+
+
+Now generate the code.

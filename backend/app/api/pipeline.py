@@ -10,8 +10,10 @@ from app.models.pipeline_plan import PipelinePlan
 from app.models.pipeline_state_db import PipelineStage, PipelineStatus
 from openai import RateLimitError
 from app.services.audit_service import AuditService
-from app.core.event_types import PLAN_GENERATED, PLAN_APPROVED
-
+from app.core.event_types import PLAN_GENERATED, PLAN_APPROVED, CODE_GENERATED, CODE_SAVED
+from app.services.codegen_service import CodegenService
+from app.services.path_policy_service import PathPolicyService
+from app.models.generated_code import CodeGenerationResult
 
 router = APIRouter()
 
@@ -185,7 +187,7 @@ async def approve_plan(
                 "status": updated_pipeline.status,
                 "approved_plan": updated_pipeline.plan
             },
-            created_by="human"
+            created_by="user"
         )
 
         return {
@@ -205,3 +207,160 @@ async def approve_plan(
             status_code=500,
             detail="Plan approval failed"
         )
+
+
+@router.post("/{pipeline_id}/generate-code")
+async def generate_code(
+    pipeline_id: str,
+    session: Session = Depends(get_session)
+):
+    pipeline_state = PipelineRepository.get_by_id(session, pipeline_id)
+
+    if pipeline_state is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Pipeline not found"
+        )
+
+
+    if pipeline_state.plan is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Pipeline does not contain an approved plan"
+        )
+
+    if pipeline_state.current_stage != PipelineStage.APPROVED.value:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Code generation cannot start from current stage: {pipeline_state.current_stage}"
+        )
+
+    if pipeline_state.status != PipelineStatus.APPROVED.value:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Plan must be approved before code generation. Current status: {pipeline_state.status}"
+        )
+
+    try:
+        generated_code = await CodegenService.generate_code(
+            spec=pipeline_state.spec,
+            plan=pipeline_state.plan
+        )
+
+        validated_code = CodeGenerationResult(**generated_code)
+
+        for generated_file in validated_code.files:
+            PathPolicyService.validate_generated_path(
+                generated_file.path
+            )
+
+        updated_pipeline = PipelineRepository.update_generated_code(
+            session=session,
+            pipeline_id=pipeline_id,
+            generated_code=validated_code.model_dump(),
+            current_stage=PipelineStage.IMPLEMENTED.value,
+            status=PipelineStatus.IMPLEMENTED.value
+        )
+
+        if updated_pipeline is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Pipeline not found"
+            )
+
+        AuditService.log_event(
+            session=session,
+            pipeline_id=updated_pipeline.pipeline_id,
+            event_type=CODE_GENERATED,
+            event_message="Code generated successfully from approved plan",
+            event_payload={
+                "current_stage": updated_pipeline.current_stage,
+                "status": updated_pipeline.status,
+                "summary": updated_pipeline.generated_code.get("summary"),
+                "files": [
+                    file["path"]
+                    for file in updated_pipeline.generated_code.get("files", [])
+                ]
+            },
+            created_by="system"
+        )
+
+        return {
+            "message": "Code generated successfully",
+            "pipeline_id": updated_pipeline.pipeline_id,
+            "current_stage": updated_pipeline.current_stage,
+            "status": updated_pipeline.status,
+            "generated_code": updated_pipeline.generated_code
+        }
+
+
+    except RateLimitError as error:
+        raise HTTPException(
+            status_code=429,
+            detail="The selected free LLM model is temporarily rate-limited. Try another model or retry later."
+        ) from error
+
+    except Exception as error:
+        logger.error("Code generation failed for pipeline %s: %s", pipeline_id, error)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Code generation failed"
+        ) from error
+
+
+@router.post("/{pipeline_id}/save-code")
+async def save_code(
+    pipeline_id: str,
+    session: Session = Depends(get_session)
+):
+    pipeline_state = PipelineRepository.get_by_id(session, pipeline_id)
+
+    if pipeline_state is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Pipeline not found"
+        )
+
+    if pipeline_state.generated_code is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Pipeline does not contain generated code"
+        )
+
+    try:
+        written_files = CodegenService.write_generated_files(
+            pipeline_state.generated_code
+        )
+
+        AuditService.log_event(
+            session=session,
+            pipeline_id=pipeline_id,
+            event_type=CODE_SAVED,
+            event_message="Generated code saved to filesystem",
+            event_payload={
+                "written_files": written_files
+            },
+            created_by="system"
+        )
+
+        return {
+            "message": "Generated code written to files successfully",
+            "pipeline_id": pipeline_id,
+            "written_files": written_files
+        }
+
+    except ValueError as error:
+        logger.error("Code saving failed validation: %s", error)
+        raise HTTPException(
+            status_code=422,
+            detail=str(error)
+        ) from error
+
+    except Exception as error:
+        logger.error("Code saving failed for pipeline %s: %s", pipeline_id, error)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Code saving failed"
+        ) from error

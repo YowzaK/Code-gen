@@ -58,3 +58,31 @@ class PipelineRepository:
     def list_all(session: Session) -> list[PipelineStateDB]:
         statement = select(PipelineStateDB)
         return list(session.exec(statement).all())
+
+    
+    @staticmethod
+    def update_generated_code(
+        session: Session,
+        pipeline_id: str,
+        generated_code: dict,
+        current_stage: str,
+        status: str
+    ) -> Optional[PipelineStateDB]:
+        statement = select(PipelineStateDB).where(
+            PipelineStateDB.pipeline_id == pipeline_id
+        )
+
+        pipeline_state = session.exec(statement).first()
+
+        if pipeline_state is None:
+            return None
+
+        pipeline_state.generated_code = generated_code
+        pipeline_state.current_stage = current_stage
+        pipeline_state.status = status
+
+        session.add(pipeline_state)
+        session.commit()
+        session.refresh(pipeline_state)
+
+        return pipeline_state
