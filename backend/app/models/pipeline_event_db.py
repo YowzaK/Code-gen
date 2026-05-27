@@ -8,7 +8,7 @@ from sqlmodel import ForeignKey, SQLModel, Field
 from datetime import datetime, timezone
 
 class PipelineEventDB(SQLModel, table=True):
-    _tablename_ = ""
+    _tablename_ = "pipeline_event"
 
     event_id: str = Field(
         default_factory=lambda: str(uuid4()),

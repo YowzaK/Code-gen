@@ -19,12 +19,40 @@ class PipelineRepository:
 
         return session.exec(statement).first()
 
+    
     @staticmethod
     def update(session: Session, pipeline_state: PipelineStateDB) -> PipelineStateDB:
         session.add(pipeline_state)
         session.commit()
         session.refresh(pipeline_state)
         return pipeline_state
+
+    @staticmethod
+    def update_status(
+        session: Session,
+        pipeline_id: str,
+        current_stage: str,
+        status: str
+    ) -> Optional[PipelineStateDB]:
+
+        statement = select(PipelineStateDB).where(
+            PipelineStateDB.pipeline_id == pipeline_id
+        )
+
+        pipeline_state = session.exec(statement).first()
+
+        if pipeline_state is None:
+            return None
+
+        pipeline_state.current_stage = current_stage
+        pipeline_state.status = status
+
+        session.add(pipeline_state)
+        session.commit()
+        session.refresh(pipeline_state)
+
+        return pipeline_state
+
 
     @staticmethod
     def list_all(session: Session) -> list[PipelineStateDB]:

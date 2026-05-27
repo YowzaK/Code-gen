@@ -8,6 +8,7 @@ from app.models.pipeline_plan import PipelinePlan
 class PipelineStage(str, Enum):
     VALID = "spec_valid"
     PLANNED = "spec_planned"
+    APPROVED = "spec_plan_approved"
     IMPLEMENTED = "code_generated"
     TESTED = "tests_generated"
     QUALITY_CHECKED = "quality_checked"
@@ -15,7 +16,8 @@ class PipelineStage(str, Enum):
 
 class PipelineStatus(str, Enum):
     PLANNING = "waiting_for_planning"
-    WAITING_FOR_PLAN_APPROVAL = "waiting_for_plan_approval"
+    PLANNED = "waiting_for_plan_approval"
+    APPROVED= "Approved_waiting_for_approval"
     IMPLEMENTING = "waiting_for_implementation"
     FAILED = "failed"
     COMPLETED = "completed"

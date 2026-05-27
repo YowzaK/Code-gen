@@ -10,7 +10,7 @@ from app.models.pipeline_plan import PipelinePlan
 from app.models.pipeline_state_db import PipelineStage, PipelineStatus
 from openai import RateLimitError
 from app.services.audit_service import AuditService
-from app.core.event_types import PLAN_GENERATED, PIPELINE_FAILED
+from app.core.event_types import PLAN_GENERATED, PLAN_APPROVED
 
 
 router = APIRouter()
@@ -83,7 +83,7 @@ async def generate_pipeline_plan(
 
         pipeline_state.plan = validated_plan.model_dump()
         pipeline_state.current_stage = PipelineStage.PLANNED.value
-        pipeline_state.status = PipelineStatus.WAITING_FOR_PLAN_APPROVAL.value
+        pipeline_state.status = PipelineStatus.PLANNED.value
 
 
         updated_pipeline = PipelineRepository.update(
@@ -146,4 +146,62 @@ async def generate_pipeline_plan(
         raise HTTPException(
             status_code=500,
             detail="Planning stage failed"
+        )
+
+@router.post("/{pipeline_id}/approve")
+async def approve_plan(
+    pipeline_id: str,
+    session: Session = Depends(get_session)
+):
+    pipeline_state = PipelineRepository.get_by_id(session, pipeline_id)
+
+    if pipeline_state is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Pipeline not found"
+        )
+
+    try:
+        updated_pipeline = PipelineRepository.update_status(
+            session=session,
+            pipeline_id=pipeline_id,
+            current_stage=PipelineStage.APPROVED.value,
+            status=PipelineStatus.APPROVED.value
+        )
+
+        if updated_pipeline is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Pipeline not found"
+            )
+
+        AuditService.log_event(
+            session=session,
+            pipeline_id=updated_pipeline.pipeline_id,
+            event_type=PLAN_APPROVED,
+            event_message="Implementation plan approved successfully",
+            event_payload={
+                "current_stage": updated_pipeline.current_stage,
+                "status": updated_pipeline.status,
+                "approved_plan": updated_pipeline.plan
+            },
+            created_by="human"
+        )
+
+        return {
+            "message": "Plan approved successfully",
+            "pipeline_id": updated_pipeline.pipeline_id,
+            "current_stage": updated_pipeline.current_stage,
+            "status": updated_pipeline.status
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        logger.error(f"Plan approval failed for pipeline {pipeline_id}: {error}")
+
+        raise HTTPException(
+            status_code=500,
+            detail="Plan approval failed"
         )
