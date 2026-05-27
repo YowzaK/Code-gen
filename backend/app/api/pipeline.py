@@ -10,12 +10,13 @@ from app.models.pipeline_plan import PipelinePlan
 from app.models.pipeline_state_db import PipelineStage, PipelineStatus
 from openai import RateLimitError
 from app.services.audit_service import AuditService
-from app.core.event_types import PLAN_GENERATED, PLAN_APPROVED, CODE_GENERATED, CODE_SAVED, TESTS_GENERATED, TEST_GENERATION_FAILED
+from app.core.event_types import PLAN_GENERATED, PLAN_APPROVED, CODE_GENERATED, CODE_SAVED, TESTS_GENERATED, QUALITY_CHECK_RUN, QUALITY_CHECK_FAILED
 from app.services.codegen_service import CodegenService
 from app.services.path_policy_service import PathPolicyService
 from app.models.generated_code import CodeGenerationResult
 from app.services.testgen_service import TestgenService
 from app.models.generated_tests import TestGenerationResult
+from app.services.quality_check_service import QualityCheckService
 
 router = APIRouter()
 
@@ -95,7 +96,7 @@ async def generate_pipeline_plan(
             pipeline_state=pipeline_state
         )
 
-        # audit log
+
         AuditService.log_event(
             session=session,
             pipeline_id=updated_pipeline.pipeline_id,
@@ -469,3 +470,76 @@ async def generate_tests(
             status_code=500,
             detail="Test generation failed"
         ) from error
+
+
+@router.post("/{pipeline_id}/run-quality-check")
+async def run_quality_check(
+    pipeline_id: str,
+    session: Session = Depends(get_session)
+):
+    pipeline_state = PipelineRepository.get_by_id(session, pipeline_id)
+
+    if pipeline_state is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Pipeline not found"
+        )
+
+    if pipeline_state.generated_tests is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Pipeline does not contain generated tests"
+        )
+
+    quality_results = QualityCheckService.run_quality_gates()
+
+    if quality_results["overall_status"] == "passed":
+        next_status = PipelineStatus.QUALITY_PASSED.value
+    else:
+        next_status = PipelineStatus.QUALITY_FAILED.value
+
+    updated_pipeline = PipelineRepository.update_quality_results(
+        session=session,
+        pipeline_id=pipeline_id,
+        quality_results=quality_results,
+        current_stage=PipelineStage.QUALITY_CHECKED.value,
+        status=next_status
+    )
+
+    if updated_pipeline is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Pipeline not found"
+        )
+
+    event_type = (
+        QUALITY_CHECK_RUN
+        if quality_results["overall_status"] == "passed"
+        else QUALITY_CHECK_FAILED
+    )
+
+    AuditService.log_event(
+        session=session,
+        pipeline_id=pipeline_id,
+        event_type=event_type,
+        event_message="Quality checks completed",
+        event_payload=quality_results,
+        created_by="system"
+    )
+
+    if quality_results["overall_status"] != "passed":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Quality checks failed",
+                "quality_results": quality_results
+            }
+        )
+
+    return {
+        "message": "Quality checks passed",
+        "pipeline_id": updated_pipeline.pipeline_id,
+        "current_stage": updated_pipeline.current_stage,
+        "status": updated_pipeline.status,
+        "quality_results": updated_pipeline.quality_results
+    }

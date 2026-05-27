@@ -110,3 +110,28 @@ class PipelineRepository:
         session.refresh(pipeline_state)
 
         return pipeline_state
+
+
+    @staticmethod
+    def update_quality_results(
+        session: Session,
+        pipeline_id: str,
+        quality_results: dict,
+        current_stage: str,
+        status: str
+    ) -> Optional[PipelineStateDB]:
+
+        pipeline_state = PipelineRepository.get_by_id(session, pipeline_id)
+
+        if pipeline_state is None:
+            return None
+
+        pipeline_state.quality_results = quality_results
+        pipeline_state.current_stage = current_stage
+        pipeline_state.status = status
+
+        session.add(pipeline_state)
+        session.commit()
+        session.refresh(pipeline_state)
+
+        return pipeline_state
