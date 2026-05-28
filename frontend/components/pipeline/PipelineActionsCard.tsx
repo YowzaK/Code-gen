@@ -132,7 +132,7 @@ export function PipelineActionsCard({
                             ? "Pipeline Generated"
                             : isApprovingPlan
                                 ? "Running pipeline..."
-                                : "Approve Plan"}
+                                : "Approve Plan and generate"}
                     </Button>
 
                     {progressMessage && (
