@@ -43,8 +43,7 @@ CodeGen is a spec-driven AI development pipeline that takes a structured feature
 ### 1. Clone the repository
 
 ```bash
-git clone <your-repository-url>
-cd <your-repository-name>
+git clone [<your-repository-url>](https://github.com/YowzaK/Code-gen.git)
 ```
 
 ---
